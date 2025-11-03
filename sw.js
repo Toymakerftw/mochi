@@ -1,13 +1,17 @@
 // sw.js - Enhanced PWA service worker with better caching strategy
-const CACHE_NAME = "mochi-v2";
-const STATIC_CACHE = "mochi-static-v2";
-const RUNTIME_CACHE = "mochi-runtime-v2";
+const CACHE_NAME = "mochi-v3";
+const STATIC_CACHE = "mochi-static-v3";
+const RUNTIME_CACHE = "mochi-runtime-v3";
 
 // Files to cache statically
 const FILES_TO_CACHE = [
   "/",
   "/index.html",
+  "/styles.css",
   "/mochi.js",
+  "/expressions.js",
+  "/sensors.js",
+  "/interactions.js",
   "/manifest.json",
   "/mochi-192.svg",
   "/mochi-512.svg",
@@ -16,6 +20,7 @@ const FILES_TO_CACHE = [
 
 // Install event - cache static assets
 self.addEventListener("install", event => {
+  console.log('Service Worker installing');
   event.waitUntil(
     caches.open(STATIC_CACHE)
       .then(cache => {
@@ -28,6 +33,7 @@ self.addEventListener("install", event => {
 
 // Activate event - clean up old caches
 self.addEventListener("activate", event => {
+  console.log('Service Worker activating');
   event.waitUntil(
     caches.keys().then(cacheNames => {
       return Promise.all(
@@ -47,18 +53,24 @@ self.addEventListener("activate", event => {
 self.addEventListener("fetch", event => {
   // Skip non-GET requests and requests to other origins
   if (event.request.method !== 'GET' || !event.request.url.startsWith(self.location.origin)) {
-    event.respondWith(fetch(event.request));
     return;
   }
 
   // For HTML requests, try network first, then cache
   if (event.request.headers.get('accept').includes('text/html')) {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.match(event.request).then(response => {
-          return response || caches.match('/index.html');
-        });
-      })
+      fetch(event.request)
+        .then(response => {
+          // Cache the new version
+          const responseClone = response.clone();
+          caches.open(RUNTIME_CACHE)
+            .then(cache => cache.put(event.request, responseClone));
+          return response;
+        })
+        .catch(() => {
+          return caches.match(event.request)
+            .then(response => response || caches.match('/index.html'));
+        })
     );
     return;
   }
@@ -96,6 +108,20 @@ self.addEventListener("fetch", event => {
 // Listen for push notifications
 self.addEventListener('push', event => {
   console.log('Push received:', event);
+  
+  const options = {
+    body: event.data ? event.data.text() : 'Mochi is here!',
+    icon: 'mochi-192.svg',
+    badge: 'mochi-192.svg',
+    vibrate: [100, 50, 100],
+    data: {
+      url: '/'
+    }
+  };
+
+  event.waitUntil(
+    self.registration.showNotification('Dasai Mochi', options)
+  );
 });
 
 // Listen for notification clicks
