@@ -1,22 +1,28 @@
 {
-  "name": "Dasai Mochi",
+  "name": "Dasai Mochi - Car Dashboard Companion",
   "short_name": "Mochi",
-  "description": "Your cute car dashboard companion",
+  "description": "Your cute car dashboard companion that reacts to your driving",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#000000",
-  "theme_color": "#000000",
-  "orientation": "portrait-primary",
+  "theme_color": "#ffffff",
+  "orientation": "any",
+  "categories": ["utilities", "lifestyle"],
   "icons": [
     {
       "src": "mochi-192.svg",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/svg+xml",
+      "purpose": "any"
     },
     {
       "src": "mochi-512.svg",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
-  ]
+  ],
+  "screenshots": [],
+  "features": ["fast", "simple", "offline-capable"]
 }
