@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dasai Mochi Web</title>
+  <style>
+    html, body { margin:0; height:100%; overflow:hidden; background:#000; }
+    #mochi { width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; }
+    svg { width:260px; height:260px; }   /* same ratio as the 128×64 OLED */
+  </style>
+</head>
+<body>
+  <div id="mochi"><svg viewBox="0 0 128 64" xmlns="http://www.w3.org/2000/svg"></svg></div>
+
+  <script src="mochi.js"></script>
+</body>
+</html>
