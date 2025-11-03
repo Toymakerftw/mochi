@@ -158,6 +158,20 @@ function initGeolocation() {
       }
       STATE.lastPos = position.coords;
       STATE.lastTime = position.timestamp;
+      
+      // Check for nearby AI cameras
+      if (window.cameraAlerts && typeof window.cameraAlerts.checkCameraProximity === 'function') {
+        const nearbyCamera = window.cameraAlerts.checkCameraProximity(
+          position.coords.latitude,
+          position.coords.longitude,
+          100 // Alert within 100 meters
+        );
+        
+        if (nearbyCamera) {
+          // Trigger camera alert (will be handled in the next step)
+          triggerCameraAlert(nearbyCamera.camera.Name);
+        }
+      }
     },
     error => {
       console.log('Geolocation error:', error);
@@ -215,6 +229,39 @@ function initBattery() {
   });
 }
 
+/* -------------------  Camera Alert Helper ------------------- */
+function triggerCameraAlert(cameraName) {
+  console.log(`AI Camera Alert: Approaching ${cameraName}`);
+  
+  // Show visual camera alert on screen
+  showCameraAlert(`AI Camera: ${cameraName}`);
+  
+  // Store camera name in state for use by other modules
+  STATE.nearbyCamera = cameraName;
+  STATE.lastCameraAlert = Date.now();
+  
+  // Call the camera alert expression if available
+  if (window.expr && typeof window.expr.cameraAlert === 'function') {
+    window.expr.cameraAlert();
+  }
+}
+
+/* ------------------- Camera Alert Display ------------------- */
+function showCameraAlert(message) {
+  const alertElement = document.getElementById('camera-alert');
+  if (alertElement) {
+    alertElement.textContent = message;
+    alertElement.style.display = 'block';
+    
+    // Hide the alert after 5 seconds
+    setTimeout(() => {
+      if (alertElement.style.display === 'block') {
+        alertElement.style.display = 'none';
+      }
+    }, 5000);
+  }
+}
+
 /* -------------------  Initialize All Sensors ------------------- */
 function initSensors() {
   initOrientation();
@@ -225,3 +272,4 @@ function initSensors() {
 
 // Make functions available globally
 window.initSensors = initSensors;
+window.triggerCameraAlert = triggerCameraAlert;

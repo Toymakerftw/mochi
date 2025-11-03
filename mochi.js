@@ -30,6 +30,7 @@ window.expr = expr;
 /* -------------------  Decision Engine ------------------- */
 let lastChange = 0;
 let lastSpeedCheck = 0;
+let lastCameraCheck = 0;
 
 function chooseExpression() {
   if (!STATE.carModeActive) return;
@@ -37,6 +38,14 @@ function chooseExpression() {
   if (STATE.isTurning || STATE.isBraking || STATE.isAccelerating) return;
   
   const now = Date.now();
+  
+  // Check for camera alerts (priority over other expressions)
+  if (STATE.nearbyCamera && STATE.lastCameraAlert && (now - STATE.lastCameraAlert < 5000)) { // Alert for 5 seconds
+    expr.cameraAlert();
+    lastChange = now;
+    resetIdle();
+    return;
+  }
   
   // Speed-based reactions
   if (now - lastSpeedCheck > 3000) {

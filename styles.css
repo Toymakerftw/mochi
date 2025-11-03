@@ -100,6 +100,28 @@ html, body {
   z-index: 100;
 }
 
+/* Camera Alert */
+#camera-alert {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: linear-gradient(135deg, #ff6b6b, #ff8e53);
+  color: white;
+  padding: 12px 24px;
+  border-radius: 25px;
+  font-family: Arial, sans-serif;
+  font-size: 16px;
+  font-weight: bold;
+  backdrop-filter: blur(10px);
+  display: none;
+  z-index: 100;
+  box-shadow: 0 5px 15px rgba(255, 107, 107, 0.4);
+  animation: pulse 1s infinite;
+  text-align: center;
+  min-width: 180px;
+}
+
 /* Car Mode Button */
 #carModeBtn {
   position: absolute;

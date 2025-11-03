@@ -446,6 +446,37 @@ const expr = {
         currentAnimationFrame = requestAnimationFrame(animateLine);
       }, i*50);
     }
+  },
+  
+  cameraAlert() {
+    clear();
+    // Alert eyes - wide open with alert expression
+    const eye = (cx) => {
+      // Draw wide open eyes with alert pupils
+      append(create('circle', {cx, cy:32, r:12, fill:'#fff'}));
+      append(create('circle', {cx:cx+2, cy:30, r:5, fill:'#000', opacity:0.9}));
+      append(create('circle', {cx:cx+4, cy:28, r:2, fill:'#fff'})); // highlight
+    };
+    eye(42); 
+    eye(86);
+    
+    // Draw exclamation mark to indicate alert
+    const exclamation = create('path', {d:'M60,15 L60,35 M60,42 L60,45', stroke:'#ff69b4', 'stroke-width':4, 'stroke-linecap':'round'});
+    append(exclamation);
+    
+    // Add pulsing animation
+    let pulsePhase = 0;
+    const animatePulse = () => {
+      pulsePhase += 0.2;
+      const scale = 1 + 0.1 * Math.sin(pulsePhase);
+      exclamation.setAttribute('transform', `translate(0, ${-2 * Math.sin(pulsePhase)}) scale(${scale})`);
+      exclamation.setAttribute('stroke', pulsePhase % Math.PI < Math.PI/2 ? '#ff69b4' : '#ff0000');
+      
+      if (pulsePhase < 20) { // Run for a few seconds
+        currentAnimationFrame = requestAnimationFrame(animatePulse);
+      }
+    };
+    currentAnimationFrame = requestAnimationFrame(animatePulse);
   }
 };
 
