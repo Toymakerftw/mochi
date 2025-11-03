@@ -3,95 +3,56 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dasai Mochi Web</title>
+  <title>Dasai Mochi</title>
+  
+  <!-- PWA Meta -->
+  <meta name="theme-color" content="#000000">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="apple-mobile-web-app-title" content="Mochi">
+  
+  <!-- Icons -->
+  <link rel="apple-touch-icon" href="mochi-192.svg">
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- PWA Splash Screens (iOS) -->
+  <link rel="apple-touch-startup-image" href="mochi-512.svg">
+
   <style>
-    html, body { 
-      margin:0; 
-      height:100%; 
-      overflow:hidden; 
-      background: #000;
-      touch-action: none;
-      user-select: none;
-      -webkit-user-select: none;
-      -webkit-touch-callout: none;
+    /* Your existing CSS here */
+    html, body { margin:0; height:100%; overflow:hidden; background:#000; touch-action:none; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none; }
+    #mochi { width:100vw; height:100vh; display:flex; align-items:center; justify-content:center; position:relative; }
+    svg { width:min(85vw,450px); height:min(42.5vw,225px); filter:drop-shadow(0 0 25px rgba(255,255,255,0.4)); transition:filter .3s; }
+    svg:active { filter:drop-shadow(0 0 35px rgba(255,255,255,0.6)); }
+    @media(max-width:600px){svg{width:95vw;height:47.5vw}}
+    @media(orientation:landscape) and (max-height:500px){svg{width:auto;height:80vh}}
+    
+    /* Fullscreen Button */
+    #fullscreenBtn{
+      position:fixed;top:15px;right:15px;width:50px;height:50px;
+      background:rgba(255,255,255,0.1);border:2px solid rgba(255,255,255,0.3);
+      border-radius:12px;cursor:pointer;display:flex;align-items:center;
+      justify-content:center;z-index:1000;transition:all .3s;backdrop-filter:blur(10px);
     }
-    #mochi { 
-      width:100vw; 
-      height:100vh; 
-      display:flex; 
-      align-items:center; 
-      justify-content:center;
-      position: relative;
-    }
-    svg { 
-      width: min(85vw, 450px);
-      height: min(42.5vw, 225px);
-      filter: drop-shadow(0 0 25px rgba(255,255,255,0.4));
-      transition: filter 0.3s ease;
-    }
-    svg:active {
-      filter: drop-shadow(0 0 35px rgba(255,255,255,0.6));
-    }
-    @media (max-width: 600px) {
-      svg {
-        width: 95vw;
-        height: 47.5vw;
-      }
-    }
-    @media (orientation: landscape) and (max-height: 500px) {
-      svg {
-        width: auto;
-        height: 80vh;
-      }
-    }
-    /* Fullscreen button */
-    #fullscreenBtn {
-      position: fixed;
-      top: 15px;
-      right: 15px;
-      width: 50px;
-      height: 50px;
-      background: rgba(255,255,255,0.1);
-      border: 2px solid rgba(255,255,255,0.3);
-      border-radius: 12px;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      transition: all 0.3s ease;
-      backdrop-filter: blur(10px);
-    }
-    #fullscreenBtn:hover {
-      background: rgba(255,255,255,0.2);
-      border-color: rgba(255,255,255,0.5);
-      transform: scale(1.1);
-    }
-    #fullscreenBtn:active {
-      transform: scale(0.95);
-    }
-    #fullscreenBtn svg {
-      width: 24px;
-      height: 24px;
-      filter: none;
-    }
-    /* Hide fullscreen button after 3 seconds of inactivity */
-    #fullscreenBtn.hidden {
-      opacity: 0;
-      pointer-events: none;
-    }
-    /* Prevent screen from sleeping */
-    @media (display-mode: standalone) {
-      body {
-        -webkit-user-select: none;
-        -webkit-tap-highlight-color: transparent;
-      }
-    }
+    #fullscreenBtn:hover{background:rgba(255,255,255,0.2);border-color:rgba(255,255,255,0.5);transform:scale(1.1)}
+    #fullscreenBtn:active{transform:scale(0.95)}
+    #fullscreenBtn svg{width:24px;height:24px}
+    #fullscreenBtn.hidden{opacity:0;pointer-events:none}
   </style>
 </head>
 <body>
   <div id="mochi"><svg viewBox="0 0 128 64" xmlns="http://www.w3.org/2000/svg"></svg></div>
 
   <script src="mochi.js"></script>
+  <script>
+  // Register service worker
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js')
+        .then(reg => console.log('Mochi PWA ready!', reg))
+        .catch(err => console.log('SW failed:', err));
+    });
+  }
+</script>
 </body>
 </html>
