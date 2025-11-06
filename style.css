@@ -443,6 +443,7 @@ body {
 .arm.arm--right {
   transform-origin: top;
   transition: transform 0.3s;
+  animation: arm-wave 2s infinite;
 }
 
 .rick.waving .arm.arm--left {
@@ -620,6 +621,11 @@ body {
 }
 
 @keyframes wave {
+  0%, 100% { transform: rotate(0deg); }
+  50% { transform: rotate(-30deg); }
+}
+
+@keyframes arm-wave {
   0%, 100% { transform: rotate(0deg); }
   50% { transform: rotate(-30deg); }
 }

@@ -34,13 +34,17 @@ document.addEventListener('DOMContentLoaded', () => {
     fast: { class: 'excited', speech: "Wubba lubba dub dub!" },
     speeding: { class: 'scared', speech: "Whoa whoa WHOA! Slow down!" },
     turning: { class: 'dizzy', speech: "Wheee! Sharp turn!" },
-    stopped: { class: 'waving', speech: "Hey! Traffic jam?" },
+    stopped: { class: '', speech: "Hey! Traffic jam?" },
     bumpy: { class: 'surprised', speech: "Bumpy road ahead!" },
-    aggressive: { class: 'angry shooting', speech: "Road rage mode activated!" }
+    aggressive: { class: 'angry shooting', speech: "Road rage mode activated!" },
+    accelerating: { class: 'excited', speech: "Punch it!" },
+    braking: { class: 'scared', speech: "Hit the brakes!" },
+    looking: { class: '', speech: "What's over there?" }
   };
 
   let currentEmote = 'idle';
   let speechTimeout = null;
+  let lastSpeed = 0;
 
   // ===== HELPER FUNCTIONS =====
   function setEmote(emoteName) {
@@ -100,6 +104,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Update heading
     if (heading !== null) {
+      if (currentSpeed < 1 && Math.abs(heading - currentHeading) > 10) {
+        setEmote('looking');
+      }
       currentHeading = heading;
       const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
       const index = Math.round(heading / 45) % 8;
@@ -128,30 +135,42 @@ document.addEventListener('DOMContentLoaded', () => {
     lastTime = now;
   }
 
-  function handleAccelerometer(event) {
+  function handleMotion(event) {
+    const acc = event.accelerationIncludingGravity;
+    const rot = event.rotationRate;
     const now = Date.now();
     const timeSinceGPS = now - lastSpeedUpdate;
-    
-    // Only use accelerometer if GPS is stale AND we're already moving
-    if (timeSinceGPS > GPS_MAX_AGE && currentSpeed > MIN_SPEED_FOR_ACCEL && gpsActive) {
-      const acc = event.accelerationIncludingGravity || event.acceleration;
-      if (!acc || !acc.x) return;
-      
-      // Calculate magnitude of acceleration vector (excluding gravity bias)
-      const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
-      
-      if (magnitude > ACCEL_THRESHOLD) {
-        const timeDelta = (now - lastSpeedUpdate) / 1000; // seconds
-        const speedChange = magnitude * timeDelta * 3.6; // m/s² → km/h
-        
-        // Apply with damping to prevent oscillation
-        currentSpeed = Math.max(0, currentSpeed + speedChange * 0.7);
-        speedEl.textContent = `${Math.round(currentSpeed)} km/h`;
-        speedSourceEl.textContent = "Accelerometer";
-        lastSpeedUpdate = now;
-        updateEmoteBasedOnSpeed();
+
+    if (acc) {
+      // Only use accelerometer if GPS is stale AND we're already moving
+      if (timeSinceGPS > GPS_MAX_AGE && currentSpeed > MIN_SPEED_FOR_ACCEL && gpsActive) {
+        const magnitude = Math.sqrt(acc.x**2 + acc.y**2 + acc.z**2);
+        if (magnitude > ACCEL_THRESHOLD) {
+          const timeDelta = (now - lastSpeedUpdate) / 1000; // seconds
+          const speedChange = magnitude * timeDelta * 3.6; // m/s² → km/h
+          currentSpeed = Math.max(0, currentSpeed + speedChange * 0.7);
+          speedEl.textContent = `${Math.round(currentSpeed)} km/h`;
+          speedSourceEl.textContent = "Accelerometer";
+          lastSpeedUpdate = now;
+          updateEmoteBasedOnSpeed();
+        }
+      }
+
+      const speedDelta = currentSpeed - lastSpeed;
+      if (speedDelta > 5) {
+        setEmote('accelerating');
+      } else if (speedDelta < -5) {
+        setEmote('braking');
       }
     }
+
+    if (rot) {
+      if (Math.abs(rot.beta) > 30 || Math.abs(rot.gamma) > 30) {
+        setEmote('turning');
+      }
+    }
+
+    lastSpeed = currentSpeed;
   }
 
   function handleOrientation(event) {
@@ -225,7 +244,7 @@ document.addEventListener('DOMContentLoaded', () => {
           const orientPerm = await DeviceOrientationEvent.requestPermission();
           
           if (motionPerm === 'granted') {
-            window.addEventListener('devicemotion', handleAccelerometer);
+            window.addEventListener('devicemotion', handleMotion);
             motionActive = true;
           }
           if (orientPerm === 'granted') {
@@ -235,7 +254,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Non-iOS: add listeners directly (Chrome, Firefox, etc.)
         else {
           if (hasMotion) {
-            window.addEventListener('devicemotion', handleAccelerometer);
+            window.addEventListener('devicemotion', handleMotion);
             motionActive = true;
           }
           if (hasOrientation) {
@@ -264,6 +283,10 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, { once: true });
 
-  // Initial state
   setEmote('idle');
+
+  rick.addEventListener('click', () => {
+    const randomEmote = Object.keys(emotes)[Math.floor(Math.random() * Object.keys(emotes).length)];
+    showSpeech(emotes[randomEmote].speech);
+  });
 });
