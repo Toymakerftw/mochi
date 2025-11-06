@@ -85,9 +85,9 @@ body {
 
 .speech-bubble {
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -200%);
+  top: 30%;
+  left: 70%;
+  transform: translate(-50%, -50%);
   background: white;
   color: black;
   padding: 15px 20px;
