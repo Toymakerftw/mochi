@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const ACCEL_THRESHOLD = 0.3; // m/s²
   const GPS_MAX_AGE = 3000;   // ms
   const MIN_SPEED_FOR_ACCEL = 3; // km/h
+  const CAMERA_PROXIMITY_THRESHOLD = 500; // meters
 
   // DOM References
   const rick = document.getElementById('rick');
@@ -25,6 +26,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const speechBubble = document.getElementById('speech');
   const speedSourceEl = document.getElementById('speed-source');
   const permissionPrompt = document.getElementById('permission-prompt');
+
+  let cameras = [];
 
   // Emote definitions
   const emotes = {
@@ -79,17 +82,47 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 3000);
   }
 
-  function calculateSpeed(lat1, lon1, lat2, lon2, timeDiffSec) {
-    const R = 6371; // Earth radius in km
-    const dLat = (lat2 - lat1) * Math.PI / 180;
-    const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
-              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-              Math.sin(dLon/2) * Math.sin(dLon/2);
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3; // metres
+    const φ1 = lat1 * Math.PI/180; // φ, λ in radians
+    const φ2 = lat2 * Math.PI/180;
+    const Δφ = (lat2-lat1) * Math.PI/180;
+    const Δλ = (lon2-lon1) * Math.PI/180;
+
+    const a = Math.sin(Δφ/2) * Math.sin(Δφ/2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ/2) * Math.sin(Δλ/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    const distance = R * c;
-    
-    return (distance / timeDiffSec) * 3600; // km/h
+
+    return R * c; // in metres
+  }
+
+  function calculateSpeed(lat1, lon1, lat2, lon2, timeDiffSec) {
+    const distance = calculateDistance(lat1, lon1, lat2, lon2);
+    return (distance / timeDiffSec) * 3.6; // km/h
+  }
+
+  async function loadCameras() {
+    try {
+      const response = await fetch('cameras.csv');
+      const data = await response.text();
+      const rows = data.split('\n').slice(1);
+      cameras = rows.map(row => {
+        const [name, latitude, longitude] = row.split(',');
+        return { name, latitude: parseFloat(latitude), longitude: parseFloat(longitude) };
+      });
+    } catch (error) {
+      console.error('Error loading cameras:', error);
+    }
+  }
+
+  function checkCameraProximity(lat, lon) {
+    for (const camera of cameras) {
+      const distance = calculateDistance(lat, lon, camera.latitude, camera.longitude);
+      if (distance < CAMERA_PROXIMITY_THRESHOLD) {
+        showSpeech(`Camera ahead: ${camera.name}`);
+      }
+    }
   }
 
   // ===== SENSOR HANDLERS =====
@@ -101,6 +134,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     locationEl.textContent = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
     gpsActive = true;
+
+    checkCameraProximity(lat, lon);
     
     // Update heading
     if (heading !== null) {
@@ -283,6 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }, { once: true });
 
+  loadCameras();
   setEmote('idle');
 
   rick.addEventListener('click', () => {
