@@ -170,6 +170,25 @@ body {
   animation: spin-character 2s linear infinite;
 }
 
+.rick.determined {
+  animation: pulse-eyes 1s infinite alternate;
+}
+
+.rick.determined .eyes > div:not(.nose) {
+  animation: pulse-eyes 1s infinite alternate;
+}
+
+.rick.concerned .eyebrow {
+  transform: rotate(-3deg) translateY(5px);
+}
+
+.rick.concerned .mouth {
+  border-top: solid 0.3rem #555;
+  border-radius: 40%;
+  width: 12vh;
+  transform: translateY(-5px);
+}
+
 .rick-hair {
   position: absolute;
   bottom: calc(10vh + 10vh);
@@ -643,4 +662,9 @@ body {
 @keyframes pulse {
   from { opacity: 0.6; }
   to { opacity: 1; }
+}
+
+@keyframes pulse-eyes {
+  from { transform: scale(1); }
+  to { transform: scale(1.1); }
 }
