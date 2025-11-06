@@ -7,15 +7,13 @@ const RUNTIME_CACHE = "mochi-runtime-v3";
 const FILES_TO_CACHE = [
   "/",
   "/index.html",
-  "/styles.css",
-  "/mochi.js",
-  "/expressions.js",
-  "/sensors.js",
-  "/interactions.js",
+  "/style.css",
+  "/script.js",
   "/manifest.json",
   "/mochi-192.svg",
   "/mochi-512.svg",
-  "/sw.js"
+  "/sw.js",
+  "/cameras.csv"
 ];
 
 // Install event - cache static assets
