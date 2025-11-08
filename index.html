@@ -5,6 +5,124 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Rick Dashboard Buddy</title>
 <link rel="stylesheet" href="style.css">
+<style>
+/* Additional inline styles for settings */
+.settings-btn {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.85);
+  color: #7fff50;
+  padding: 12px;
+  border-radius: 50%;
+  border: 2px solid #7fff50;
+  cursor: pointer;
+  z-index: 1001;
+  font-size: 2rem;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.settings-btn:hover {
+  background: rgba(127, 255, 80, 0.2);
+}
+
+.settings-panel {
+  position: fixed;
+  top: 80px;
+  right: 20px;
+  background: rgba(0, 0, 0, 0.95);
+  color: #7fff50;
+  padding: 20px;
+  border-radius: 10px;
+  border: 2px solid #7fff50;
+  z-index: 1000;
+  min-width: 300px;
+  max-width: 350px;
+  backdrop-filter: blur(4px);
+  display: none;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.settings-panel.show {
+  display: block;
+}
+
+.settings-panel h4 {
+  margin: 0 0 15px 0;
+  color: #7fff50;
+  font-size: 1.6rem;
+}
+
+.setting-item {
+  margin: 15px 0;
+}
+
+.setting-item label {
+  display: block;
+  margin-bottom: 5px;
+  color: #aae6e2;
+  font-size: 1.2rem;
+}
+
+.setting-item input[type="range"] {
+  width: 100%;
+  margin: 5px 0;
+}
+
+.setting-item .range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 1rem;
+  color: #888;
+}
+
+.toggle-btn {
+  background: #352909;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 5px;
+  border: 2px solid #7fff50;
+  cursor: pointer;
+  font-size: 1.2rem;
+  font-family: 'Courier New', monospace;
+}
+
+.toggle-btn.active {
+  background: #7fff50;
+  color: black;
+}
+
+.camera-alert {
+  background: rgba(255, 0, 0, 0.2);
+  border: 2px solid #ff0000;
+  padding: 10px;
+  border-radius: 5px;
+  margin-top: 10px;
+  animation: pulse-alert 1s infinite;
+  font-size: 1.2rem;
+}
+
+@keyframes pulse-alert {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.status-panel {
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.camera-count {
+  font-size: 1.1rem;
+  color: #888;
+}
+</style>
 </head>
 <body>
 
@@ -24,15 +142,43 @@
   </div>
   <div class="status-item">
     <span class="status-label">Mode:</span>
-    <span class="status-value" id="mode">Waiting for sensors...</span>
+    <span class="status-value" id="mode">Waiting...</span>
   </div>
   <div class="status-item">
     <span class="status-label">Location:</span>
-    <span class="status-value" id="location">Tap to enable sensors</span>
+    <span class="status-value" id="location">Tap to enable</span>
   </div>
   <div class="status-item">
     <span class="status-label">Speed Source:</span>
     <span class="status-value" id="speed-source">Not active</span>
+  </div>
+  <div class="status-item camera-count">
+    <span class="status-label">Cameras:</span>
+    <span class="status-value" id="camera-count">0</span>
+  </div>
+</div>
+
+<div class="settings-btn" id="settings-btn">⚙️</div>
+
+<div class="settings-panel" id="settings-panel">
+  <h4>⚙️ Settings</h4>
+  
+  <div class="setting-item">
+    <label>Camera Alert Radius: <span id="radius-value">500</span>m</label>
+    <input type="range" id="camera-radius" min="100" max="2000" step="100" value="500">
+    <div class="range-labels">
+      <span>100m</span>
+      <span>2000m</span>
+    </div>
+  </div>
+  
+  <div class="setting-item">
+    <label>Sound Alerts:</label>
+    <button class="toggle-btn active" id="sound-toggle">🔊 ON</button>
+  </div>
+  
+  <div class="setting-item" id="camera-alert-container">
+    <!-- Camera alerts will appear here -->
   </div>
 </div>
 
@@ -85,6 +231,163 @@
 </div>
 
 <script src="script.js"></script>
+<script>
+// Enhanced script with settings
+document.addEventListener('DOMContentLoaded', () => {
+  let cameraRadius = 500;
+  let soundEnabled = true;
+  let lastCameraAlert = 0;
+  let cameras = [];
+
+  const settingsBtn = document.getElementById('settings-btn');
+  const settingsPanel = document.getElementById('settings-panel');
+  const cameraRadiusInput = document.getElementById('camera-radius');
+  const radiusValueEl = document.getElementById('radius-value');
+  const soundToggle = document.getElementById('sound-toggle');
+  const cameraAlertContainer = document.getElementById('camera-alert-container');
+  const cameraCountEl = document.getElementById('camera-count');
+
+  // Settings toggle
+  settingsBtn.addEventListener('click', () => {
+    settingsPanel.classList.toggle('show');
+  });
+
+  // Camera radius change
+  cameraRadiusInput.addEventListener('input', (e) => {
+    cameraRadius = parseInt(e.target.value);
+    radiusValueEl.textContent = cameraRadius;
+  });
+
+  // Sound toggle
+  soundToggle.addEventListener('click', () => {
+    soundEnabled = !soundEnabled;
+    soundToggle.classList.toggle('active');
+    soundToggle.textContent = soundEnabled ? '🔊 ON' : '🔇 OFF';
+  });
+
+  // Load cameras
+  async function loadCameras() {
+    try {
+      const response = await fetch('cameras.csv');
+      const data = await response.text();
+      const rows = data.split('\n').slice(1);
+      cameras = rows.map(row => {
+        const parts = row.split(',');
+        if (parts.length >= 3) {
+          return { 
+            name: parts[0].trim(), 
+            latitude: parseFloat(parts[1]), 
+            longitude: parseFloat(parts[2]) 
+          };
+        }
+        return null;
+      }).filter(c => c && c.name && !isNaN(c.latitude) && !isNaN(c.longitude));
+      
+      cameraCountEl.textContent = cameras.length;
+      console.log('Loaded cameras:', cameras.length);
+    } catch (error) {
+      console.error('Error loading cameras:', error);
+      cameraCountEl.textContent = 'Error';
+    }
+  }
+
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  }
+
+  function playBeep() {
+    if (!soundEnabled) return;
+    
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+    } catch (error) {
+      console.error('Audio error:', error);
+    }
+  }
+
+  function checkCameraProximity(lat, lon) {
+    const now = Date.now();
+    if (now - lastCameraAlert < 10000) return;
+
+    for (const camera of cameras) {
+      const distance = calculateDistance(lat, lon, camera.latitude, camera.longitude);
+      if (distance < cameraRadius) {
+        const distanceM = Math.round(distance);
+        
+        // Show alert in settings panel
+        cameraAlertContainer.innerHTML = `
+          <div class="camera-alert">
+            <strong>📷 Camera Alert!</strong><br>
+            ${camera.name}<br>
+            <small>${distanceM}m ahead</small>
+          </div>
+        `;
+        
+        // Trigger speech bubble
+        const speechBubble = document.getElementById('speech');
+        speechBubble.textContent = `📷 ${camera.name} - ${distanceM}m ahead!`;
+        speechBubble.classList.add('show');
+        
+        setTimeout(() => {
+          speechBubble.classList.remove('show');
+        }, 4000);
+        
+        // Play sound
+        playBeep();
+        
+        lastCameraAlert = now;
+        
+        // Clear alert after 5 seconds
+        setTimeout(() => {
+          cameraAlertContainer.innerHTML = '';
+        }, 5000);
+        
+        break;
+      }
+    }
+  }
+
+  // Enhance the original GPS handler
+  const originalHandleGPS = window.handleGPS;
+  window.handleGPS = function(position) {
+    if (originalHandleGPS) {
+      originalHandleGPS(position);
+    }
+    checkCameraProximity(position.coords.latitude, position.coords.longitude);
+  };
+
+  // Expose for external use
+  window.checkCameraProximity = checkCameraProximity;
+  window.getCameraRadius = () => cameraRadius;
+
+  loadCameras();
+});
+</script>
 
 </body>
 </html>
