@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-<title>Rick Dashboard Buddy</title>
+<title>Rick Dashboard Buddy - Enhanced</title>
 <link rel="stylesheet" href="style.css">
 <style>
 /* Additional inline styles for settings */
@@ -91,6 +91,7 @@
   cursor: pointer;
   font-size: 1.2rem;
   font-family: 'Courier New', monospace;
+  width: 100%;
 }
 
 .toggle-btn.active {
@@ -121,6 +122,22 @@
 .camera-count {
   font-size: 1.1rem;
   color: #888;
+}
+
+/* Landscape mode support */
+@media (orientation: landscape) {
+  .sky {
+    flex-direction: row;
+  }
+  
+  .stars {
+    min-height: 100vh;
+    width: 60%;
+  }
+  
+  .status-panel {
+    max-height: 95vh;
+  }
 }
 </style>
 </head>
@@ -156,6 +173,10 @@
     <span class="status-label">Cameras:</span>
     <span class="status-value" id="camera-count">0</span>
   </div>
+  <div class="status-item">
+    <span class="status-label">Accuracy:</span>
+    <span class="status-value" id="accuracy">---</span>
+  </div>
 </div>
 
 <div class="settings-btn" id="settings-btn">⚙️</div>
@@ -175,6 +196,11 @@
   <div class="setting-item">
     <label>Sound Alerts:</label>
     <button class="toggle-btn active" id="sound-toggle">🔊 ON</button>
+  </div>
+  
+  <div class="setting-item">
+    <label>Emote Sensitivity:</label>
+    <button class="toggle-btn active" id="sensitivity-toggle">⚡ Normal</button>
   </div>
   
   <div class="setting-item" id="camera-alert-container">
@@ -230,39 +256,351 @@
   <div class="ground"></div>
 </div>
 
-<script src="script.js"></script>
 <script>
-// Enhanced script with settings
 document.addEventListener('DOMContentLoaded', () => {
+  // ===== STATE =====
+  let currentSpeed = 0;
+  let currentHeading = 0;
+  let currentTilt = 0;
+  let lastLat = null;
+  let lastLon = null;
+  let lastTime = null;
+  let lastSpeedUpdate = 0;
+  let gpsActive = false;
+  let lastHeading = null;
+  let lastHeadingTime = null;
   let cameraRadius = 500;
   let soundEnabled = true;
   let lastCameraAlert = 0;
   let cameras = [];
+  let highSensitivity = false;
+  let lastEmoteChange = 0;
+  let currentEmote = 'idle';
+  let speedHistory = [];
+  let positionHistory = [];
+  let deviceOrientation = 'portrait';
 
+  // Constants
+  const GPS_MAX_AGE = 3000;
+  const CAMERA_ALERT_COOLDOWN = 10000;
+  const MIN_SPEED_THRESHOLD = 2; // km/h - ignore GPS noise below this
+  const SPEED_SMOOTH_WINDOW = 3; // Number of samples to average
+  const MIN_DISTANCE_FOR_SPEED = 5; // meters - minimum distance to calculate speed
+  const EMOTE_COOLDOWN = 3000; // ms - minimum time between emote changes (normal sensitivity)
+  const EMOTE_COOLDOWN_HIGH = 1500; // ms - high sensitivity
+
+  // DOM References
+  const rick = document.getElementById('rick');
+  const speedEl = document.getElementById('speed');
+  const headingEl = document.getElementById('heading');
+  const tiltEl = document.getElementById('tilt');
+  const modeEl = document.getElementById('mode');
+  const locationEl = document.getElementById('location');
+  const speechBubble = document.getElementById('speech');
+  const speedSourceEl = document.getElementById('speed-source');
+  const permissionPrompt = document.getElementById('permission-prompt');
+  const accuracyEl = document.getElementById('accuracy');
   const settingsBtn = document.getElementById('settings-btn');
   const settingsPanel = document.getElementById('settings-panel');
   const cameraRadiusInput = document.getElementById('camera-radius');
   const radiusValueEl = document.getElementById('radius-value');
   const soundToggle = document.getElementById('sound-toggle');
+  const sensitivityToggle = document.getElementById('sensitivity-toggle');
   const cameraAlertContainer = document.getElementById('camera-alert-container');
   const cameraCountEl = document.getElementById('camera-count');
 
-  // Settings toggle
+  // Emote definitions
+  const emotes = {
+    idle: { class: '', speech: "Just cruisin'..." },
+    slow: { class: 'sleeping', speech: "Zzz... wake me up..." },
+    normal: { class: 'happy', speech: "Nice and steady! *burp*" },
+    fast: { class: 'excited', speech: "Wubba lubba dub dub!" },
+    speeding: { class: 'scared', speech: "Whoa! Slow down!" },
+    turning: { class: 'dizzy', speech: "Wheee! Turn!" },
+    stopped: { class: '', speech: "Traffic jam?" },
+    accelerating: { class: 'excited', speech: "Punch it!" },
+    braking: { class: 'scared', speech: "Hit the brakes!" },
+    cornering: { class: 'dizzy', speech: "Corner!" },
+    sharp_corner: { class: 'surprised dizzy', speech: "Sharp corner!" },
+    camera_ahead: { class: 'surprised shooting', speech: "📷 Camera ahead!" },
+    high_speed: { class: 'excited', speech: "Fast!" },
+    safety: { class: 'happy', speech: "Safe driving!" }
+  };
+
+  let speechTimeout = null;
+  let lastSpeed = 0;
+
+  // ===== HELPER FUNCTIONS =====
+  function setEmote(emoteName) {
+    const now = Date.now();
+    const cooldown = highSensitivity ? EMOTE_COOLDOWN_HIGH : EMOTE_COOLDOWN;
+    
+    // Prevent rapid emote changes unless it's a critical alert
+    if (currentEmote === emoteName) return;
+    if (emoteName !== 'camera_ahead' && emoteName !== 'speeding' && (now - lastEmoteChange) < cooldown) {
+      return;
+    }
+    
+    currentEmote = emoteName;
+    lastEmoteChange = now;
+    const emote = emotes[emoteName];
+    
+    // Reset classes
+    rick.className = 'rick column';
+    
+    // Apply new emote classes
+    if (emote.class) {
+      emote.class.split(' ').forEach(cls => rick.classList.add(cls));
+    }
+    
+    // Update speech
+    showSpeech(emote.speech);
+    
+    // Update mode display
+    modeEl.textContent = emoteName.charAt(0).toUpperCase() + emoteName.slice(1).replace('_', ' ');
+  }
+
+  function showSpeech(text) {
+    speechBubble.textContent = text;
+    speechBubble.classList.add('show');
+    
+    if (speechTimeout) clearTimeout(speechTimeout);
+    
+    speechTimeout = setTimeout(() => {
+      speechBubble.classList.remove('show');
+    }, 3000);
+  }
+
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371e3;
+    const φ1 = lat1 * Math.PI / 180;
+    const φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lon2 - lon1) * Math.PI / 180;
+
+    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+              Math.cos(φ1) * Math.cos(φ2) *
+              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  }
+
+  function calculateSmoothedSpeed(lat, lon, timestamp, accuracy) {
+    // Add to position history
+    positionHistory.push({ lat, lon, timestamp, accuracy });
+    
+    // Keep only recent positions (last 10 seconds)
+    const cutoffTime = timestamp - 10000;
+    positionHistory = positionHistory.filter(p => p.timestamp > cutoffTime);
+    
+    // Need at least 2 positions
+    if (positionHistory.length < 2) return 0;
+    
+    // Find best position pair with sufficient time gap
+    let bestSpeed = 0;
+    let validSpeedFound = false;
+    
+    // Try to use positions at least 2 seconds apart for better accuracy
+    for (let i = positionHistory.length - 1; i >= 0; i--) {
+      const timeDiff = (timestamp - positionHistory[i].timestamp) / 1000; // seconds
+      
+      if (timeDiff >= 1.5 && timeDiff <= 5) { // Use 1.5-5 second window
+        const distance = calculateDistance(
+          positionHistory[i].lat, 
+          positionHistory[i].lon, 
+          lat, 
+          lon
+        );
+        
+        // Only calculate speed if distance is significant
+        if (distance > MIN_DISTANCE_FOR_SPEED) {
+          const speed = (distance / timeDiff) * 3.6; // Convert to km/h
+          
+          // Filter out unrealistic speeds (GPS jumps)
+          if (speed < 200 && (accuracy < 20 || speed > 5)) { // Be more lenient if moving
+            bestSpeed = speed;
+            validSpeedFound = true;
+            break;
+          }
+        }
+      }
+    }
+    
+    if (!validSpeedFound) return 0;
+    
+    // Add to speed history for smoothing
+    speedHistory.push(bestSpeed);
+    if (speedHistory.length > SPEED_SMOOTH_WINDOW) {
+      speedHistory.shift();
+    }
+    
+    // Calculate average speed
+    const avgSpeed = speedHistory.reduce((a, b) => a + b, 0) / speedHistory.length;
+    
+    // Apply minimum threshold to filter GPS noise
+    return avgSpeed < MIN_SPEED_THRESHOLD ? 0 : avgSpeed;
+  }
+
+  function updateEmoteBasedOnSpeed(speed) {
+    const speedDelta = speed - lastSpeed;
+    
+    // Require larger changes for emote transitions
+    if (speedDelta > 10) {
+      setEmote('accelerating');
+    } else if (speedDelta < -10) {
+      setEmote('braking');
+    } else if (speed < 1) {
+      setEmote('stopped');
+    } else if (speed < 15) {
+      setEmote('slow');
+    } else if (speed < 60) {
+      setEmote('normal');
+    } else if (speed < 90) {
+      setEmote('fast');
+    } else if (speed < 110) {
+      setEmote('high_speed');
+    } else {
+      setEmote('speeding');
+    }
+    
+    lastSpeed = speed;
+  }
+
+  function handleGPS(position) {
+    const lat = position.coords.latitude;
+    const lon = position.coords.longitude;
+    const heading = position.coords.heading;
+    const accuracy = position.coords.accuracy;
+    const now = Date.now();
+    
+    locationEl.textContent = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    accuracyEl.textContent = `±${Math.round(accuracy)}m`;
+    gpsActive = true;
+
+    // Only process if accuracy is reasonable
+    if (accuracy > 50) {
+      speedSourceEl.textContent = "GPS (Low accuracy)";
+      return;
+    }
+
+    // Check camera proximity
+    checkCameraProximity(lat, lon);
+    
+    // Update heading and detect turns
+    if (heading !== null && heading >= 0) {
+      if (lastHeading !== null && lastHeadingTime !== null) {
+        const headingDelta = Math.abs(heading - lastHeading);
+        const normalizedDelta = headingDelta > 180 ? 360 - headingDelta : headingDelta;
+        const timeDelta = (now - lastHeadingTime) / 1000;
+        const headingChangeRate = normalizedDelta / timeDelta;
+        
+        // More conservative corner detection
+        if (currentSpeed > 20 && headingChangeRate > 30) {
+          if (headingChangeRate > 60) {
+            setEmote('sharp_corner');
+          } else if (headingChangeRate > 40) {
+            setEmote('cornering');
+          }
+        }
+      }
+      
+      currentHeading = heading;
+      lastHeading = heading;
+      lastHeadingTime = now;
+      
+      const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      const index = Math.round(heading / 45) % 8;
+      headingEl.textContent = `${Math.round(heading)}° ${directions[index]}`;
+    }
+    
+    // Calculate smoothed speed
+    const calculatedSpeed = calculateSmoothedSpeed(lat, lon, now, accuracy);
+    currentSpeed = calculatedSpeed;
+    
+    speedEl.textContent = `${Math.round(currentSpeed)} km/h`;
+    speedSourceEl.textContent = accuracy < 15 ? "GPS (High accuracy)" : "GPS";
+    lastSpeedUpdate = now;
+    
+    updateEmoteBasedOnSpeed(currentSpeed);
+    
+    lastLat = lat;
+    lastLon = lon;
+    lastTime = now;
+  }
+
+  function handleOrientation(event) {
+    // Detect device orientation for landscape support
+    const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+    
+    if (event.beta !== null) {
+      // Adjust beta based on orientation
+      let adjustedBeta = event.beta;
+      if (isLandscape) {
+        // In landscape, use gamma for tilt
+        adjustedBeta = event.gamma || 0;
+      }
+      
+      currentTilt = Math.round(adjustedBeta);
+      tiltEl.textContent = `${currentTilt}°`;
+    }
+  }
+
+  async function initSensors() {
+    permissionPrompt.classList.add('hidden');
+
+    if ('geolocation' in navigator) {
+      navigator.geolocation.watchPosition(
+        handleGPS,
+        (error) => {
+          console.error('GPS Error:', error);
+          locationEl.textContent = 'GPS unavailable';
+          speedSourceEl.textContent = "GPS unavailable";
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 500,
+          timeout: 10000
+        }
+      );
+    }
+
+    try {
+      if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+        const permission = await DeviceOrientationEvent.requestPermission();
+        if (permission === 'granted') {
+          window.addEventListener('deviceorientation', handleOrientation);
+        }
+      } else {
+        window.addEventListener('deviceorientation', handleOrientation);
+      }
+    } catch (err) {
+      console.error('Sensor permission error:', err);
+    }
+    
+    setEmote('idle');
+  }
+
+  // ===== SETTINGS =====
   settingsBtn.addEventListener('click', () => {
     settingsPanel.classList.toggle('show');
   });
 
-  // Camera radius change
   cameraRadiusInput.addEventListener('input', (e) => {
     cameraRadius = parseInt(e.target.value);
     radiusValueEl.textContent = cameraRadius;
   });
 
-  // Sound toggle
   soundToggle.addEventListener('click', () => {
     soundEnabled = !soundEnabled;
     soundToggle.classList.toggle('active');
     soundToggle.textContent = soundEnabled ? '🔊 ON' : '🔇 OFF';
+  });
+
+  sensitivityToggle.addEventListener('click', () => {
+    highSensitivity = !highSensitivity;
+    sensitivityToggle.classList.toggle('active');
+    sensitivityToggle.textContent = highSensitivity ? '⚡ High' : '⚡ Normal';
   });
 
   // Load cameras
@@ -291,21 +629,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  function calculateDistance(lat1, lon1, lat2, lon2) {
-    const R = 6371e3;
-    const φ1 = lat1 * Math.PI / 180;
-    const φ2 = lat2 * Math.PI / 180;
-    const Δφ = (lat2 - lat1) * Math.PI / 180;
-    const Δλ = (lon2 - lon1) * Math.PI / 180;
-
-    const a = Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
-              Math.cos(φ1) * Math.cos(φ2) *
-              Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-
-    return R * c;
-  }
-
   function playBeep() {
     if (!soundEnabled) return;
     
@@ -332,14 +655,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function checkCameraProximity(lat, lon) {
     const now = Date.now();
-    if (now - lastCameraAlert < 10000) return;
+    if (now - lastCameraAlert < CAMERA_ALERT_COOLDOWN) return;
 
     for (const camera of cameras) {
       const distance = calculateDistance(lat, lon, camera.latitude, camera.longitude);
       if (distance < cameraRadius) {
         const distanceM = Math.round(distance);
         
-        // Show alert in settings panel
         cameraAlertContainer.innerHTML = `
           <div class="camera-alert">
             <strong>📷 Camera Alert!</strong><br>
@@ -348,21 +670,13 @@ document.addEventListener('DOMContentLoaded', () => {
           </div>
         `;
         
-        // Trigger speech bubble
-        const speechBubble = document.getElementById('speech');
-        speechBubble.textContent = `📷 ${camera.name} - ${distanceM}m ahead!`;
-        speechBubble.classList.add('show');
+        setEmote('camera_ahead');
+        showSpeech(`📷 ${camera.name} - ${distanceM}m!`);
         
-        setTimeout(() => {
-          speechBubble.classList.remove('show');
-        }, 4000);
-        
-        // Play sound
         playBeep();
         
         lastCameraAlert = now;
         
-        // Clear alert after 5 seconds
         setTimeout(() => {
           cameraAlertContainer.innerHTML = '';
         }, 5000);
@@ -372,20 +686,15 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // Enhance the original GPS handler
-  const originalHandleGPS = window.handleGPS;
-  window.handleGPS = function(position) {
-    if (originalHandleGPS) {
-      originalHandleGPS(position);
+  // ===== USER INTERACTION TRIGGER =====
+  document.body.addEventListener('click', () => {
+    if (!permissionPrompt.classList.contains('hidden')) {
+      initSensors();
     }
-    checkCameraProximity(position.coords.latitude, position.coords.longitude);
-  };
-
-  // Expose for external use
-  window.checkCameraProximity = checkCameraProximity;
-  window.getCameraRadius = () => cameraRadius;
+  }, { once: true });
 
   loadCameras();
+  setEmote('idle');
 });
 </script>
 
